@@ -98,7 +98,6 @@ async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
     await message.answer("Введите ваш класс:")
     await state.set_state(Registration.class_num)
-
 @router.message(Registration.class_num)
 async def finish_registration(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -120,7 +119,20 @@ async def finish_registration(message: types.Message, state: FSMContext):
         "achievements": []
     }
 
-    save_users()
-    sync_to_google(user_id)
+    # 🔎 ЛОГ
+    print(f"[DEBUG] Новый профиль создан: {user_profiles[user_id]}")
+
+    try:
+        save_users()
+        print("[DEBUG] ✅ Профиль сохранён в users.json")
+    except Exception as e:
+        print(f"[ERROR] ❌ Ошибка сохранения JSON: {e}")
+
+    try:
+        sync_to_google(user_id)
+        print("[DEBUG] ✅ Синхронизация с Google Таблицей успешна")
+    except Exception as e:
+        print(f"[Google Sync Error] ❌ {e}")
+
     await message.answer("✅ Вы успешно зарегистрированы!")
     await state.clear()
