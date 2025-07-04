@@ -12,7 +12,7 @@ from profile import router as profile_router, user_profiles
 from aiogram.filters import StateFilter
 from aiogram.fsm.state import default_state
 
-# Загрузка переменных
+# Загрузка переменных окружения
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -20,9 +20,9 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 # Инициализация бота
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
-dp.include_router(profile_router)  # FSM-регистрация
+dp.include_router(profile_router)  # Подключаем FSM регистрацию
 
-# Старт
+# Команда /start
 @dp.message(F.text == "/start")
 async def start_handler(message: types.Message):
     user_id = str(message.from_user.id)
@@ -42,12 +42,12 @@ async def start_handler(message: types.Message):
             reply_markup=main_menu
         )
 
-# ⛔ fallback — только если пользователь НЕ в FSM
+# fallback, только если пользователь НЕ в FSM
 @dp.message(StateFilter(default_state))
 async def fallback(message: types.Message):
     await message.answer("👀 Я тебя не понял. Нажми /start.")
 
-# Webhook
+# Webhook события
 async def on_startup(dispatcher: Dispatcher):
     print("📡 Устанавливаем webhook...")
     await bot.set_webhook(WEBHOOK_URL)
@@ -55,7 +55,7 @@ async def on_startup(dispatcher: Dispatcher):
 async def on_shutdown(dispatcher: Dispatcher):
     await bot.delete_webhook()
 
-# Запуск на Render
+# Запуск через Aiohttp (для Render)
 app = web.Application()
 SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
 setup_application(app, dp, on_startup=on_startup, on_shutdown=on_shutdown)
