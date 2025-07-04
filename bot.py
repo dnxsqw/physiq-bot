@@ -32,7 +32,10 @@ async def start_handler(message: types.Message):
     else:
         await message.answer(f"С возвращением, {user_profiles[user_id]['first_name']}!", reply_markup=main_menu)
 
-@dp.message()
+from aiogram.filters import StateFilter
+from aiogram.fsm.state import default_state
+
+@dp.message(StateFilter(default_state))
 async def fallback(message: types.Message):
     await message.answer("👀 Я тебя не понял. Нажми /start.")
 
