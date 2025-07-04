@@ -20,8 +20,11 @@ dp = Dispatcher()
 async def start_handler(message: types.Message):
     user_id = str(message.from_user.id)
     if user_id not in user_profiles:
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(types.KeyboardButton(text="📋 Зарегистрироваться"))
+        kb = types.ReplyKeyboardMarkup(
+    keyboard=[[types.KeyboardButton(text="📋 Зарегистрироваться")]],
+    resize_keyboard=True
+)
+
         await message.answer("👋 Привет! Добро пожаловать в PhysIQ. Пожалуйста, зарегистрируйся, чтобы начать!", reply_markup=kb)
     else:
         await message.answer(f"С возвращением, {user_profiles[user_id]['first_name']}!", reply_markup=main_menu)
