@@ -9,16 +9,20 @@ from dotenv import load_dotenv
 from menu import main_menu
 from profile import router as profile_router, user_profiles
 
-# Загрузка переменных окружения
+from aiogram.filters import StateFilter
+from aiogram.fsm.state import default_state
+
+# Загрузка переменных
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Создание бота и диспетчера
+# Инициализация бота
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
-dp.include_router(profile_router)  # Подключаем FSM-регистрацию
+dp.include_router(profile_router)  # FSM-регистрация
 
+# Старт
 @dp.message(F.text == "/start")
 async def start_handler(message: types.Message):
     user_id = str(message.from_user.id)
@@ -28,18 +32,22 @@ async def start_handler(message: types.Message):
             keyboard=[[types.KeyboardButton(text="📋 Зарегистрироваться")]],
             resize_keyboard=True
         )
-        await message.answer("👋 Привет! Добро пожаловать в PhysIQ. Пожалуйста, зарегистрируйся, чтобы начать!", reply_markup=kb)
+        await message.answer(
+            "👋 Привет! Добро пожаловать в PhysIQ. Пожалуйста, зарегистрируйся, чтобы начать!",
+            reply_markup=kb
+        )
     else:
-        await message.answer(f"С возвращением, {user_profiles[user_id]['first_name']}!", reply_markup=main_menu)
+        await message.answer(
+            f"С возвращением, {user_profiles[user_id]['first_name']}!",
+            reply_markup=main_menu
+        )
 
-from aiogram.filters import StateFilter
-from aiogram.fsm.state import default_state
-
+# ⛔ fallback — только если пользователь НЕ в FSM
 @dp.message(StateFilter(default_state))
 async def fallback(message: types.Message):
     await message.answer("👀 Я тебя не понял. Нажми /start.")
 
-# Вебхуки
+# Webhook
 async def on_startup(dispatcher: Dispatcher):
     print("📡 Устанавливаем webhook...")
     await bot.set_webhook(WEBHOOK_URL)
@@ -47,7 +55,7 @@ async def on_startup(dispatcher: Dispatcher):
 async def on_shutdown(dispatcher: Dispatcher):
     await bot.delete_webhook()
 
-# Запуск через aiohttp
+# Запуск на Render
 app = web.Application()
 SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
 setup_application(app, dp, on_startup=on_startup, on_shutdown=on_shutdown)
