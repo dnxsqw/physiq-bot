@@ -1,7 +1,11 @@
+from aiogram import types, Router, F
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
 import json, os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from aiogram import types
+
+router = Router()
 
 USERS_FILE = "users.json"
 GOOGLE_SHEET_NAME = "PhysIQ Users"
@@ -9,7 +13,7 @@ GOOGLE_JSON_KEYFILE = "physiq-bot-bb4835247b64.json"
 
 user_profiles = {}
 
-# Загрузка пользователей
+# Загрузка
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r", encoding="utf-8") as f:
         user_profiles = json.load(f)
@@ -50,39 +54,6 @@ def sync_to_google(user_id):
     except Exception as e:
         print(f"[Google Sync Error] {e}")
 
-async def register_user_if_needed(message: types.Message, bot):
-    user_id = str(message.from_user.id)
-    username = message.from_user.username or ""
-    await message.answer("Введите ваше имя:")
-    first = await bot.wait_for("message")
-    await message.answer("Введите вашу фамилию:")
-    last = await bot.wait_for("message")
-    await message.answer("Введите ваш город:")
-    city = await bot.wait_for("message")
-    await message.answer("Введите вашу школу (полное название):")
-    school = await bot.wait_for("message")
-    await message.answer("Введите ваш класс (например, 9):")
-    class_resp = await bot.wait_for("message")
-
-    normalized = normalize_school(school.text)
-
-    user_profiles[user_id] = {
-        "username": username,
-        "first_name": first.text,
-        "last_name": last.text,
-        "city": city.text,
-        "school": school.text,
-        "normalized_school": normalized,
-        "class": class_resp.text,
-        "manuls": 0,
-        "streak": 0,
-        "solved": 0,
-        "achievements": []
-    }
-    save_users()
-    sync_to_google(user_id)
-    await message.answer("✅ Вы успешно зарегистрированы!", reply_markup=main_menu)
-
 def normalize_school(name):
     name = name.lower()
     if "рфмш" in name and "астана" in name:
@@ -90,3 +61,66 @@ def normalize_school(name):
     elif "школа-лицей" in name and "8" in name and "павлодар" in name:
         return "ШЛ №8 Павлодар"
     return name.title()
+
+# 👤 Состояния FSM
+class Registration(StatesGroup):
+    first_name = State()
+    last_name = State()
+    city = State()
+    school = State()
+    class_num = State()
+
+@router.message(F.text == "📋 Зарегистрироваться")
+async def begin_registration(message: types.Message, state: FSMContext):
+    await message.answer("Введите ваше имя:")
+    await state.set_state(Registration.first_name)
+
+@router.message(Registration.first_name)
+async def process_first(message: types.Message, state: FSMContext):
+    await state.update_data(first_name=message.text)
+    await message.answer("Введите вашу фамилию:")
+    await state.set_state(Registration.last_name)
+
+@router.message(Registration.last_name)
+async def process_last(message: types.Message, state: FSMContext):
+    await state.update_data(last_name=message.text)
+    await message.answer("Введите ваш город:")
+    await state.set_state(Registration.city)
+
+@router.message(Registration.city)
+async def process_city(message: types.Message, state: FSMContext):
+    await state.update_data(city=message.text)
+    await message.answer("Введите вашу школу (полное название):")
+    await state.set_state(Registration.school)
+
+@router.message(Registration.school)
+async def process_school(message: types.Message, state: FSMContext):
+    await state.update_data(school=message.text)
+    await message.answer("Введите ваш класс:")
+    await state.set_state(Registration.class_num)
+
+@router.message(Registration.class_num)
+async def finish_registration(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = str(message.from_user.id)
+    username = message.from_user.username or ""
+    normalized = normalize_school(data["school"])
+
+    user_profiles[user_id] = {
+        "username": username,
+        "first_name": data["first_name"],
+        "last_name": data["last_name"],
+        "city": data["city"],
+        "school": data["school"],
+        "normalized_school": normalized,
+        "class": message.text,
+        "manuls": 0,
+        "streak": 0,
+        "solved": 0,
+        "achievements": []
+    }
+
+    save_users()
+    sync_to_google(user_id)
+    await message.answer("✅ Вы успешно зарегистрированы!")
+    await state.clear()
