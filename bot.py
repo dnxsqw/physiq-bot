@@ -8,7 +8,9 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from menu import main_menu
-from profile import router as profile_router, user_profiles
+from user_profile import router as profile_router, user_profiles
+from user_profile import register_user_if_needed, user_profiles, router as profile_router
+dp.include_router(profile_router)
 
 # Загрузка .env
 load_dotenv()
