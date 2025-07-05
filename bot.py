@@ -8,7 +8,11 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from menu import main_menu
-from user_profile import register_user_if_needed, user_profiles, router as profile_router
+from user_profile import (
+    register_user_if_needed,
+    user_profiles,
+    router as profile_router
+)
 
 # Загрузка .env
 load_dotenv()
@@ -45,12 +49,12 @@ async def start_handler(message: types.Message):
             reply_markup=main_menu
         )
 
-# fallback — если ни один хендлер не сработал
+# fallback
 fallback_router = Router()
 @fallback_router.message()
 async def fallback(message: types.Message):
     await message.answer("👀 Я тебя не понял. Нажми /start.")
-fallback_router.priority = -1  # ниже всех
+fallback_router.priority = -1
 dp.include_router(fallback_router)
 
 # Webhook
