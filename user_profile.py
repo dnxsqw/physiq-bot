@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -67,6 +67,12 @@ def sync_to_google(user_id: str):
     except Exception as e:
         logging.warning(f"[Google Sync Error] ❌ {e}")
 
+# Хендлер для старта регистрации при нажатии кнопки
+@router.message(F.text == "📋 Зарегистрироваться")
+async def begin_register(message: Message, state: FSMContext):
+    await register_user_if_needed(message, state)
+
+# Шаги регистрации
 @router.message(Register.first_name)
 async def process_first_name(message: Message, state: FSMContext):
     await state.update_data(first_name=message.text)
@@ -117,11 +123,12 @@ async def finish_registration(message: Message, state: FSMContext):
     await message.answer("🎉 Регистрация завершена! Теперь ты можешь пользоваться ботом.")
     await state.clear()
 
-async def register_user_if_needed(message: Message, bot):
+# Основная функция регистрации
+async def register_user_if_needed(message: Message, state: FSMContext):
     user_id = str(message.from_user.id)
     if user_id in user_profiles:
         return
 
     await message.answer("👋 Привет! Давай сначала зарегистрируемся. Введи своё имя:")
-    state = FSMContext(storage=bot.dispatcher.storage, key=message.from_user.id)
     await state.set_state(Register.first_name)
+
