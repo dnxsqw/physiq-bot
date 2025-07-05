@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -11,13 +11,11 @@ import gspread
 
 router = Router()
 
-# Путь к файлу с профилями
+# Файл с данными пользователей
 USERS_FILE = "users.json"
-
-# Путь к ключу сервисного аккаунта
 GOOGLE_JSON_KEYFILE = "physiq-bot-bb4835247b64.json"
 
-# Загрузка профилей
+# Загрузка пользователей
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r", encoding="utf-8") as f:
         user_profiles = json.load(f)
@@ -67,33 +65,12 @@ def sync_to_google(user_id: str):
     except Exception as e:
         logging.warning(f"[Google Sync Error] ❌ {e}")
 
-# 💡 Важно: finish_registration должен быть определён ДО вызова
-async def finish_registration(message: Message, state: FSMContext):
-    data = await state.get_data()
-    user_id = str(message.from_user.id)
+# 👉 Хендлер на кнопку "📋 Зарегистрироваться"
+@router.message(F.text == "📋 Зарегистрироваться")
+async def start_registration(message: Message, state: FSMContext):
+    await state.set_state(Register.first_name)
+    await message.answer("👋 Давай начнем! Введи своё имя:")
 
-    profile = {
-        "username": message.from_user.username or "",
-        "first_name": data["first_name"],
-        "last_name": data["last_name"],
-        "city": data["city"],
-        "school": data["school"],
-        "normalized_school": normalize_school(data["school"]),
-        "class": data["grade"],
-        "manuls": 0,
-        "streak": 0,
-        "solved": 0,
-        "achievements": []
-    }
-    user_profiles[user_id] = profile
-    logging.debug(f"[DEBUG] Новый профиль создан: {profile}")
-    save_profiles()
-    sync_to_google(user_id)
-
-    await message.answer("🎉 Регистрация завершена! Теперь ты можешь пользоваться ботом.")
-    await state.clear()
-
-# Шаги регистрации
 @router.message(Register.first_name)
 async def process_first_name(message: Message, state: FSMContext):
     await state.update_data(first_name=message.text)
@@ -121,9 +98,31 @@ async def process_school(message: Message, state: FSMContext):
 @router.message(Register.grade)
 async def process_grade(message: Message, state: FSMContext):
     await state.update_data(grade=message.text)
-    await finish_registration(message, state)
+    data = await state.get_data()
+    user_id = str(message.from_user.id)
 
-# Проверка и запуск регистрации вручную
+    profile = {
+        "username": message.from_user.username or "",
+        "first_name": data["first_name"],
+        "last_name": data["last_name"],
+        "city": data["city"],
+        "school": data["school"],
+        "normalized_school": normalize_school(data["school"]),
+        "class": data["grade"],
+        "manuls": 0,
+        "streak": 0,
+        "solved": 0,
+        "achievements": []
+    }
+    user_profiles[user_id] = profile
+    logging.debug(f"[DEBUG] Новый профиль создан: {profile}")
+    save_profiles()
+    sync_to_google(user_id)
+
+    await message.answer("🎉 Регистрация завершена! Теперь ты можешь пользоваться ботом.")
+    await state.clear()
+
+# (не используется напрямую, но можно подключить при необходимости)
 async def register_user_if_needed(message: Message, bot):
     user_id = str(message.from_user.id)
     if user_id in user_profiles:
