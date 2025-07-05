@@ -6,26 +6,11 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-from oauth2client.service_account import ServiceAccountCredentials
-import gspread
-
 from menu import main_menu
 
 router = Router()
 
 USERS_FILE = "users.json"
-import io
-import json
-
-GOOGLE_JSON_KEY = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-
-def sync_to_google(user_id: str):
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), scope)
-        client = gspread.authorize(creds)
-        ...
-
 
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r", encoding="utf-8") as f:
@@ -49,9 +34,18 @@ def save_profiles():
 
 def sync_to_google(user_id: str):
     try:
+        import gspread
+        from oauth2client.service_account import ServiceAccountCredentials
+
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_JSON_KEYFILE, scope)
+        json_data = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        if not json_data:
+            raise ValueError("Переменная среды GOOGLE_SERVICE_ACCOUNT_JSON не установлена")
+
+        creds_dict = json.loads(json_data)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
+
         sheet = client.open("PhysIQ Users").sheet1
         profile = user_profiles[user_id]
         row = [
