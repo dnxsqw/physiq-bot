@@ -69,8 +69,10 @@ def sync_to_google(user_id: str):
 
 # Хендлер для старта регистрации при нажатии кнопки
 @router.message(F.text == "📋 Зарегистрироваться")
-async def begin_register(message: Message, state: FSMContext):
-    await register_user_if_needed(message, state)
+async def start_registration(message: Message, state: FSMContext):
+    await message.answer("Сначала введи своё имя:")
+    await state.set_state(Register.first_name)
+
 
 # Шаги регистрации
 @router.message(Register.first_name)
@@ -94,7 +96,7 @@ async def process_city(message: Message, state: FSMContext):
 @router.message(Register.school)
 async def process_school(message: Message, state: FSMContext):
     await state.update_data(school=message.text)
-    await message.answer("Теперь введи класс (например, 9):")
+    await message.answer("Теперь введи класс (цифрами):")
     await state.set_state(Register.grade)
 
 @router.message(Register.grade)
