@@ -14,7 +14,18 @@ from menu import main_menu
 router = Router()
 
 USERS_FILE = "users.json"
-GOOGLE_JSON_KEYFILE = "physiq-bot-ea91210f8f94.json"
+import io
+import json
+
+GOOGLE_JSON_KEY = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+
+def sync_to_google(user_id: str):
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), scope)
+        client = gspread.authorize(creds)
+        ...
+
 
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r", encoding="utf-8") as f:
