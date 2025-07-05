@@ -100,9 +100,9 @@ async def process_school(message: Message, state: FSMContext):
     await state.set_state(Register.grade)
 
 @router.message(Register.grade)
-async def finish_registration(message: Message, state: FSMContext):
-    data = await state.get_data()
-    user_id = str(message.from_user.id)
+async def process_grade(message: Message, state: FSMContext):
+    await state.update_data(grade=message.text)
+    await finish_registration(message, state)
 
     profile = {
         "username": message.from_user.username or "",
