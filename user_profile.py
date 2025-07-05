@@ -1,16 +1,30 @@
 import json
 import os
-import re
-from datetime import datetime
-from aiogram import Router, types, F
+import logging
+from aiogram import Router, types
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import gspread
 
-# ==== FSM состояния ====
+router = Router()
+
+# Путь к файлу с профилями
+USERS_FILE = "users.json"
+
+# Путь к ключу сервисного аккаунта
+GOOGLE_JSON_KEYFILE = "physiq-bot-bb4835247b64.json"
+
+# Загрузка профилей
+if os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        user_profiles = json.load(f)
+else:
+    user_profiles = {}
+
+# Состояния регистрации
 class Register(StatesGroup):
     first_name = State()
     last_name = State()
@@ -18,130 +32,96 @@ class Register(StatesGroup):
     school = State()
     grade = State()
 
-# ==== Пути и константы ====
-USERS_FILE = "users.json"
-GOOGLE_JSON_PATH = "GOOGLE_CREDENTIALS_JSON"
-GOOGLE_SHEET_NAME = "PhysIQ Users"
+def normalize_school(school: str) -> str:
+    return school.lower().capitalize().replace("школа", "Школа").replace("лицей", "Лицей")
 
-router = Router()
-user_profiles = {}
-
-# ==== Загрузка данных из users.json ====
-def load_users():
-    global user_profiles
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            user_profiles = json.load(f)
-    else:
-        user_profiles = {}
-
-# ==== Сохранение users.json ====
-def save_users():
+def save_profiles():
     with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(user_profiles, f, indent=2, ensure_ascii=False)
+        json.dump(user_profiles, f, ensure_ascii=False, indent=2)
+    logging.debug("✅ Профиль сохранён в users.json")
 
-# ==== Нормализация названия школы ====
-def normalize_school(school_name):
-    return re.sub(r"\W+", " ", school_name.strip().lower()).title()
-
-# ==== Синхронизация с Google Sheets ====
-def sync_to_google(user_id):
+def sync_to_google(user_id: str):
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_JSON_PATH, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_JSON_KEYFILE, scope)
         client = gspread.authorize(creds)
-        sheet = client.open(GOOGLE_SHEET_NAME).sheet1
 
-        user = user_profiles[str(user_id)]
-        rows = sheet.get_all_records()
-        existing_row = next((i for i, row in enumerate(rows, start=2) if str(row.get("telegram_username")) == str(user.get("username"))), None)
-
-        data = [
-            user["username"],
-            user["first_name"],
-            user["last_name"],
-            user["city"],
-            user["school"],
-            user["normalized_school"],
-            user["class"],
-            user["solved"],
-            user["manuls"],
-            user["streak"],
-            ", ".join(user.get("achievements", [])),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sheet = client.open("PhysIQ Users").sheet1
+        profile = user_profiles[user_id]
+        row = [
+            user_id,
+            profile["username"],
+            profile["first_name"],
+            profile["last_name"],
+            profile["city"],
+            profile["school"],
+            profile["normalized_school"],
+            profile["class"],
+            str(profile["manuls"]),
+            str(profile["streak"]),
+            str(profile["solved"]),
+            ", ".join(profile["achievements"])
         ]
-
-        if existing_row:
-            sheet.update(f"A{existing_row}:L{existing_row}", [data])
-        else:
-            sheet.append_row(data)
+        sheet.append_row(row, value_input_option="USER_ENTERED")
+        logging.debug("✅ Профиль синхронизирован с Google Sheets")
     except Exception as e:
-        print("[Google Sync Error] ❌", e)
+        logging.warning(f"[Google Sync Error] ❌ {e}")
 
-# ==== Команда /start ====
-@router.message(F.text == "/start")
-async def start(message: types.Message, state: FSMContext):
+@router.message(Register.first_name)
+async def process_first_name(message: Message, state: FSMContext):
+    await state.update_data(first_name=message.text)
+    await message.answer("Теперь введи свою фамилию:")
+    await state.set_state(Register.last_name)
+
+@router.message(Register.last_name)
+async def process_last_name(message: Message, state: FSMContext):
+    await state.update_data(last_name=message.text)
+    await message.answer("Из какого ты города?")
+    await state.set_state(Register.city)
+
+@router.message(Register.city)
+async def process_city(message: Message, state: FSMContext):
+    await state.update_data(city=message.text)
+    await message.answer("Укажи свою школу:")
+    await state.set_state(Register.school)
+
+@router.message(Register.school)
+async def process_school(message: Message, state: FSMContext):
+    await state.update_data(school=message.text)
+    await message.answer("Теперь введи класс (например, 9):")
+    await state.set_state(Register.grade)
+
+@router.message(Register.grade)
+async def finish_registration(message: Message, state: FSMContext):
+    data = await state.get_data()
     user_id = str(message.from_user.id)
-    username = message.from_user.username
 
-    if user_id in user_profiles:
-        await message.answer(f"👤 Добро пожаловать обратно, {user_profiles[user_id]['first_name']}!\n\n🧪 Вы уже зарегистрированы.")
-        return
-
-    user_profiles[user_id] = {
-        "username": username,
-        "first_name": "",
-        "last_name": "",
-        "city": "",
-        "school": "",
-        "normalized_school": "",
-        "class": "",
+    profile = {
+        "username": message.from_user.username or "",
+        "first_name": data["first_name"],
+        "last_name": data["last_name"],
+        "city": data["city"],
+        "school": data["school"],
+        "normalized_school": normalize_school(data["school"]),
+        "class": data["grade"],
         "manuls": 0,
         "streak": 0,
         "solved": 0,
         "achievements": []
     }
-
-    await state.set_state(Register.first_name)
-    await message.answer("👤 Введите ваше *имя*:")
-
-# ==== FSM Шаги регистрации ====
-@router.message(Register.first_name)
-async def reg_first_name(message: types.Message, state: FSMContext):
-    user_profiles[str(message.from_user.id)]["first_name"] = message.text.strip()
-    await state.set_state(Register.last_name)
-    await message.answer("👤 Теперь введите вашу *фамилию*:")
-
-@router.message(Register.last_name)
-async def reg_last_name(message: types.Message, state: FSMContext):
-    user_profiles[str(message.from_user.id)]["last_name"] = message.text.strip()
-    await state.set_state(Register.city)
-    await message.answer("🏙 Введите ваш *город*:")
-
-@router.message(Register.city)
-async def reg_city(message: types.Message, state: FSMContext):
-    user_profiles[str(message.from_user.id)]["city"] = message.text.strip()
-    await state.set_state(Register.school)
-    await message.answer("🏫 Введите полное название вашей *школы*:")
-
-@router.message(Register.school)
-async def reg_school(message: types.Message, state: FSMContext):
-    school = message.text.strip()
-    user_profiles[str(message.from_user.id)]["school"] = school
-    user_profiles[str(message.from_user.id)]["normalized_school"] = normalize_school(school)
-    await state.set_state(Register.grade)
-    await message.answer("🎓 Введите ваш *класс* (например, 9):")
-
-@router.message(Register.grade)
-async def reg_grade(message: types.Message, state: FSMContext):
-    user_id = str(message.from_user.id)
-    user_profiles[user_id]["class"] = message.text.strip()
-    save_users()
+    user_profiles[user_id] = profile
+    logging.debug(f"[DEBUG] Новый профиль создан: {profile}")
+    save_profiles()
     sync_to_google(user_id)
+
+    await message.answer("🎉 Регистрация завершена! Теперь ты можешь пользоваться ботом.")
     await state.clear()
 
-    kb = ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="📄 Мой профиль"), KeyboardButton(text="⚙️ Изменить профиль")]
-    ], resize_keyboard=True)
+async def register_user_if_needed(message: Message, bot):
+    user_id = str(message.from_user.id)
+    if user_id in user_profiles:
+        return
 
-    await message.answer("✅ Вы успешно зарегистрированы!", reply_markup=kb)
+    await message.answer("👋 Привет! Давай сначала зарегистрируемся. Введи своё имя:")
+    state = FSMContext(storage=bot.dispatcher.storage, key=message.from_user.id)
+    await state.set_state(Register.first_name)
