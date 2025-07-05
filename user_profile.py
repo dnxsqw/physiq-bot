@@ -14,7 +14,7 @@ from menu import main_menu
 router = Router()
 
 USERS_FILE = "users.json"
-GOOGLE_JSON_KEYFILE = "physiq-bot-bb4835247b64.json"
+GOOGLE_JSON_KEYFILE = "physiq-bot-ea91210f8f94.json"
 
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r", encoding="utf-8") as f:
